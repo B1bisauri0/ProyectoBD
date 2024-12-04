@@ -1,0 +1,1282 @@
+
+-----------------------------------------
+-------- UPSERTS Store Procedures -------
+-----------------------------------------
+
+-- get_total_carrito
+-- get_PCosto_Base
+-- get_PCosto_Descuento
+-- get_Descuento
+-- get_metodos
+-- get_dir
+--
+
+	----------------------------------
+	-------- Id de un usuario -------- 
+	----------------------------------
+
+    
+
+	---------------------------------------
+	-------- Carrito de un usuario -------- 
+	---------------------------------------
+
+CREATE PROCEDURE get_carrito
+    @id_usuario INT,     -- ID del usuario
+    @OutCode INT OUTPUT  -- Código de salida
+AS
+BEGIN
+    BEGIN TRY
+        -- Validar que el usuario tiene un carrito
+        IF NOT EXISTS (SELECT 1 FROM Carrito WHERE ID_Usuario = @id_usuario)
+        BEGIN
+            SET @OutCode = 50021; -- Carrito no encontrado para este usuario
+            RETURN;
+        END
+
+        -- Definir el costo fijo de envío
+        DECLARE @CostoEnvio DECIMAL(10, 2) = 100.00;
+
+        -- Seleccionar productos en el carrito del usuario con descuento y costo de envío
+        SELECT 
+            p.Nombre_Producto,
+            p.Descripcion,
+            @CostoEnvio AS Costo_Envio,
+            p.Precio,
+            cp.Cantidad,
+            CAST(p.Precio * cp.Cantidad AS DECIMAL(10, 2)) AS Total,
+            ISNULL(d.Descuento_Porcentaje, 0) AS Descuento,
+            CAST(
+                (p.Precio * (1 - ISNULL(d.Descuento_Porcentaje, 0) / 100)) * cp.Cantidad 
+                AS DECIMAL(10, 2)
+            ) AS Total_Descuento,
+            CAST(
+                ((p.Precio * (1 - ISNULL(d.Descuento_Porcentaje, 0) / 100)) * cp.Cantidad) + @CostoEnvio
+                AS DECIMAL(10, 2)
+            ) AS Total_Con_Envio,
+            p.Imagen
+        FROM 
+            Carrito c
+        INNER JOIN 
+            Carrito_Producto cp ON c.ID_Carrito = cp.ID_Carrito
+        INNER JOIN 
+            Productos p ON cp.ID_Producto = p.ID_Producto
+        LEFT JOIN 
+            Descuentos d ON p.ID_Producto = d.ID_Producto
+            AND CAST(GETDATE() AS DATE) BETWEEN d.Fecha_Inicio AND ISNULL(d.Fecha_Fin, CAST(GETDATE() AS DATE))
+        WHERE 
+            c.ID_Usuario = @id_usuario
+        ORDER BY 
+            p.Nombre_Producto; -- Ordenar por nombre de producto
+
+        -- Si la ejecución fue exitosa
+        SET @OutCode = 0; -- Operación exitosa
+
+    END TRY
+    BEGIN CATCH
+        -- Manejar errores y establecer un código de error general
+        SET @OutCode = 50000; -- Error general
+
+        -- Capturar el mensaje del error
+        DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
+        THROW 50000, @ErrorMessage, 1;
+    END CATCH
+END;
+GO
+
+
+
+
+	-------------------------------------------
+	-------- direcciones de un usuario -------- 
+	-------------------------------------------
+
+-- util para obtener el id de una dir y hacer un update
+CREATE PROCEDURE get_User_Dir
+    @Correo_Electronico NVARCHAR(150), -- Correo del usuario
+    @OutCode INT OUTPUT                -- Código de salida
+AS
+BEGIN
+    BEGIN TRY
+        -- Validar que el usuario existe
+        IF NOT EXISTS (SELECT 1 FROM Usuarios WHERE Correo_Electronico = @Correo_Electronico)
+        BEGIN
+            SET @OutCode = 50004; -- Usuario no encontrado
+            RETURN;
+        END
+
+        -- Obtener el ID del usuario
+        DECLARE @Usuario_Id INT;
+        SET @Usuario_Id = (SELECT ID_Usuario FROM Usuarios WHERE Correo_Electronico = @Correo_Electronico);
+
+        -- Obtener todas las direcciones del usuario
+        SELECT 
+            d.ID_Direccion,
+            d.Direccion,
+            d.Ciudad,
+            d.Provincia,
+            d.Codigo_Postal,
+            d.Pais,
+            d.Principal
+        FROM 
+            Direcciones d
+        WHERE 
+            d.ID_Usuario = @Usuario_Id
+        ORDER BY 
+            d.Principal DESC, -- Mostrar primero la dirección principal
+            d.ID_Direccion ASC; -- Ordenar por ID de dirección
+
+        -- Si la ejecución fue exitosa
+        SET @OutCode = 0; -- Código para operación exitosa
+
+    END TRY
+    BEGIN CATCH
+        -- Manejar errores
+        DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
+        THROW 50000, @ErrorMessage, 1;
+    END CATCH
+END;
+GO
+
+
+
+
+    --------------------------------------
+	-------- Metodos de un usuario -------- 
+	--------------------------------------
+
+-- util para obtener el id de un metodo y hacer un update
+CREATE PROCEDURE get_User_Metodo
+    @Correo_Electronico NVARCHAR(150), -- Correo del usuario
+    @OutCode INT OUTPUT                -- Código de salida
+AS
+BEGIN
+    BEGIN TRY
+        -- Validar que el usuario existe
+        IF NOT EXISTS (SELECT 1 FROM Usuarios WHERE Correo_Electronico = @Correo_Electronico)
+        BEGIN
+            SET @OutCode = 50004; -- Usuario no encontrado
+            RETURN;
+        END
+
+        -- Obtener el ID del usuario
+        DECLARE @Usuario_Id INT;
+        SET @Usuario_Id = (SELECT ID_Usuario FROM Usuarios WHERE Correo_Electronico = @Correo_Electronico);
+
+        -- Obtener todos los métodos de pago del usuario
+        SELECT 
+            mp.ID_Metodo_Pago,
+            mp.Tipo,
+            mp.Detalles,
+            mp.Principal
+        FROM 
+            Métodos_Pago mp
+        WHERE 
+            mp.ID_Usuario = @Usuario_Id
+        ORDER BY 
+            mp.Principal DESC, -- Mostrar primero el método de pago principal
+            mp.ID_Metodo_Pago ASC; -- Ordenar por ID del método de pago
+
+        -- Si la ejecución fue exitosa
+        SET @OutCode = 0; -- Código para operación exitosa
+
+    END TRY
+    BEGIN CATCH
+        -- Manejar errores
+        DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
+        THROW 50000, @ErrorMessage, 1;
+    END CATCH
+END;
+GO
+
+
+
+    --------------------------------------
+	-------- Todos los productos -------- 
+	--------------------------------------
+
+    -- util para obtener el id de un producto y hacer un update
+CREATE PROCEDURE get_allProductos
+AS
+BEGIN
+    BEGIN TRY
+        -- Seleccionar todos los productos con sus detalles
+        SELECT 
+            p.ID_Producto,
+            p.Nombre_Producto,
+            p.Descripcion,
+            c.Nombre_Categoria,
+            m.Nombre_Marca,
+            p.Precio,
+            p.Existencias,
+            p.Fecha_Creacion,
+            p.Imagen
+        FROM 
+            Productos p
+        INNER JOIN 
+            Categorías c ON p.ID_Categoria = c.ID_Categoria
+        INNER JOIN 
+            Marcas m ON p.ID_Marca = m.ID_Marca
+        ORDER BY 
+            p.Nombre_Producto ASC; -- Ordenar alfabéticamente por nombre de producto
+
+    END TRY
+    BEGIN CATCH
+        -- Manejar errores
+        DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
+        THROW 50000, @ErrorMessage, 1;
+    END CATCH
+END;
+GO
+
+
+
+    -------------------------------------------------
+	-------- Todos los pedidos de un usuario --------
+	-------------------------------------------------
+
+    -- util para modificar con upsert(pendiente, en preparación, enviado, entregado)
+CREATE PROCEDURE get_userPedidos
+    @Correo_Electronico NVARCHAR(150), -- Correo del usuario
+    @PageNumber INT,                   -- Número de la página
+    @PageSize INT = 10,                -- Cantidad de registros por página (10 por defecto)
+    @OutCode INT OUTPUT                -- Código de salida
+AS
+BEGIN
+    BEGIN TRY
+        -- Validar que el número de página y el tamaño de página sean válidos
+        IF @PageNumber <= 0 OR @PageSize <= 0
+        BEGIN
+            SET @OutCode = 50017; -- Parámetros de paginación inválidos
+            RETURN;
+        END
+
+        -- Validar que el usuario exista
+        IF NOT EXISTS (SELECT 1 FROM Usuarios WHERE Correo_Electronico = @Correo_Electronico)
+        BEGIN
+            SET @OutCode = 50004; -- Usuario no encontrado
+            RETURN;
+        END
+
+        -- Obtener el ID del usuario
+        DECLARE @Usuario_Id INT;
+        SET @Usuario_Id = (SELECT ID_Usuario FROM Usuarios WHERE Correo_Electronico = @Correo_Electronico);
+
+        -- Calcular el número de registros a omitir
+        DECLARE @Offset INT = (@PageNumber - 1) * @PageSize;
+
+        -- Seleccionar pedidos del usuario con paginación
+        SELECT 
+            p.ID_Pedido,
+            p.Fecha_Pedido,
+            p.Estado,
+            p.Precio_Total,
+            d.Direccion,
+            mp.Tipo AS Metodo_Pago,
+            mp.Detalles AS Detalles_Metodo_Pago
+        FROM 
+            Pedidos p
+        INNER JOIN 
+            Direcciones d ON p.ID_Direccion = d.ID_Direccion
+        INNER JOIN 
+            Métodos_Pago mp ON p.ID_Metodo_Pago = mp.ID_Metodo_Pago
+        WHERE 
+            p.ID_Usuario = @Usuario_Id
+        ORDER BY 
+            p.Fecha_Pedido DESC, -- Mostrar pedidos más recientes primero
+            p.ID_Pedido DESC
+        OFFSET @Offset ROWS
+        FETCH NEXT @PageSize ROWS ONLY;
+
+        -- Si la ejecución fue exitosa
+        SET @OutCode = 0; -- Código para operación exitosa
+
+    END TRY
+    BEGIN CATCH
+        -- Manejar errores
+        DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
+        THROW 50000, @ErrorMessage, 1;
+    END CATCH
+END;
+GO
+
+
+
+
+    -----------------------------------
+	-------- Todos los usuario -------- 
+	-----------------------------------
+
+    -- util para obtener el correo de todos los usuarios y el admin pueda hacer upsert
+-- get_allUsers
+
+
+
+	---------------------------------------
+	-------- Productos con ofertas -------- -- ofertas vigentes
+	---------------------------------------
+
+CREATE PROCEDURE get_ofertas
+    @PageNumber INT,  -- Número de la página
+    @PageSize INT,     -- Cantidad de registros por página
+    @OutCode INT OUTPUT
+AS
+BEGIN
+    BEGIN TRY
+        -- Validar que los parámetros sean válidos
+        IF @PageNumber <= 0 OR @PageSize <= 0
+        BEGIN
+            SET @OutCode = 50017;  -- El número de página y el tamaño de página deben ser mayores a cero
+            RETURN;
+        END
+
+        -- Calcular el número de registros a omitir
+        DECLARE @Offset INT = (@PageNumber - 1) * @PageSize;
+
+        -- Selección de productos con descuentos vigentes para el día actual, con paginación
+        SELECT 
+            p.ID_Producto,
+            p.Nombre_Producto,
+            p.Descripcion,
+            p.Precio AS Precio_Original,
+            d.Descuento_Porcentaje,
+            CAST(p.Precio * (1 - d.Descuento_Porcentaje / 100) AS DECIMAL(10, 2)) AS Precio_Con_Descuento,
+            d.Fecha_Inicio,
+            d.Fecha_Fin
+        FROM 
+            Productos p
+        INNER JOIN 
+            Descuentos d ON p.ID_Producto = d.ID_Producto
+        WHERE 
+            CAST(GETDATE() AS DATE) BETWEEN d.Fecha_Inicio AND ISNULL(d.Fecha_Fin, CAST(GETDATE() AS DATE))
+        ORDER BY 
+            p.Nombre_Producto
+        OFFSET @Offset ROWS
+        FETCH NEXT @PageSize ROWS ONLY;
+
+        -- Si la ejecución fue exitosa
+        SET @OutCode = 0; -- Código para operación exitosa
+
+    END TRY
+    BEGIN CATCH
+        -- Capturar errores y lanzarlos
+        DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
+        THROW 50000, @ErrorMessage, 1;
+    END CATCH
+END;
+GO
+
+
+
+	-----------------------------------------------
+	-------- Productos con ofertas del dia -------- -- Ofertas que van a terminar hoy
+	-----------------------------------------------
+
+CREATE PROCEDURE get_ofertas_dia
+    @PageNumber INT,  -- Número de la página
+    @PageSize INT,     -- Cantidad de registros por página (puedes fijarlo a 10 si prefieres)
+    @OutCode INT OUTPUT -- Código de salida para indicar el estado
+AS
+BEGIN
+    BEGIN TRY
+        -- Validar que los parámetros sean válidos
+        IF @PageNumber <= 0 OR @PageSize <= 0
+        BEGIN
+            SET @OutCode = 50017;  -- Código para parámetros no válidos
+            RETURN;
+        END
+
+        -- Calcular el número de registros a omitir
+        DECLARE @Offset INT = (@PageNumber - 1) * @PageSize;
+
+        -- Selección de productos con descuentos vigentes para el último día (hoy), con paginación
+        SELECT 
+            p.ID_Producto,
+            p.Nombre_Producto,
+            p.Descripcion,
+            p.Precio AS Precio_Original,
+            d.Descuento_Porcentaje,
+            CAST(p.Precio * (1 - d.Descuento_Porcentaje / 100) AS DECIMAL(10, 2)) AS Precio_Con_Descuento,
+            d.Fecha_Inicio,
+            d.Fecha_Fin
+        FROM 
+            Productos p
+        INNER JOIN 
+            Descuentos d ON p.ID_Producto = d.ID_Producto
+        WHERE 
+            CAST(GETDATE() AS DATE) BETWEEN d.Fecha_Inicio AND d.Fecha_Fin -- Hoy es una fecha válida
+            AND d.Fecha_Fin = CAST(GETDATE() AS DATE) -- Último día de vigencia
+        ORDER BY 
+            p.Nombre_Producto
+        OFFSET @Offset ROWS
+        FETCH NEXT @PageSize ROWS ONLY;
+
+        -- Si la ejecución fue exitosa
+        SET @OutCode = 0; -- Código para operación exitosa
+
+    END TRY
+    BEGIN CATCH
+        -- Capturar errores y lanzarlos
+        DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
+        THROW 50000, @ErrorMessage, 1;
+    END CATCH
+END;
+GO
+
+
+
+	----------------------------
+	-------- Categorias -------- 
+	----------------------------
+
+CREATE PROCEDURE get_Categorias
+    @PageNumber INT,                   -- Número de la página
+    @PageSize INT = 10,                -- Cantidad de registros por página (10 por defecto)
+    @OutCode INT OUTPUT                -- Código de salida
+AS
+BEGIN
+    BEGIN TRY
+        -- Validar que los parámetros de paginación sean válidos
+        IF @PageNumber <= 0 OR @PageSize <= 0
+        BEGIN
+            SET @OutCode = 50017; -- Parámetros de paginación inválidos
+            RETURN;
+        END
+
+        -- Calcular el número de registros a omitir
+        DECLARE @Offset INT = (@PageNumber - 1) * @PageSize;
+
+        -- Seleccionar categorías con paginación
+        SELECT 
+            ID_Categoria,
+            Nombre_Categoria,
+            Descripcion
+        FROM 
+            Categorías
+        ORDER BY 
+            Nombre_Categoria ASC -- Ordenar alfabéticamente por nombre de categoría
+        OFFSET @Offset ROWS
+        FETCH NEXT @PageSize ROWS ONLY;
+
+        -- Si la ejecución fue exitosa
+        SET @OutCode = 0; -- Código para operación exitosa
+
+    END TRY
+    BEGIN CATCH
+        -- Manejar errores
+        DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
+        THROW 50000, @ErrorMessage, 1;
+    END CATCH
+END;
+GO
+
+
+
+	--------------------------------------------------------------
+	-------- descuentos ordenados por fecha nuevos-viejos -------- 
+	--------------------------------------------------------------
+-- get_promociones
+
+CREATE PROCEDURE get_descuentos
+    @PageNumber INT,                   -- Número de la página
+    @PageSize INT = 10,                -- Cantidad de registros por página (10 por defecto)
+    @OutCode INT OUTPUT                -- Código de salida
+AS
+BEGIN
+    BEGIN TRY
+        -- Validar que los parámetros de paginación sean válidos
+        IF @PageNumber <= 0 OR @PageSize <= 0
+        BEGIN
+            SET @OutCode = 50017; -- Parámetros de paginación inválidos
+            RETURN;
+        END
+
+        -- Calcular el número de registros a omitir
+        DECLARE @Offset INT = (@PageNumber - 1) * @PageSize;
+
+        -- Seleccionar productos con descuento aplicando la función calcular_precio_unitario
+        SELECT 
+            p.Nombre_Producto AS NombreProducto,
+            d.Descuento_Porcentaje AS DescuentoPorcentaje,
+            d.Fecha_Inicio AS FechaInicio,
+            d.Fecha_Fin AS FechaFin,
+            p.Precio AS PrecioOriginal,
+            dbo.calcular_precio_unitario(p.ID_Producto) AS PrecioConDescuento
+        FROM 
+            Descuentos d
+        INNER JOIN 
+            Productos p ON d.ID_Producto = p.ID_Producto
+        WHERE 
+            CAST(GETDATE() AS DATE) BETWEEN d.Fecha_Inicio AND ISNULL(d.Fecha_Fin, CAST(GETDATE() AS DATE))
+        ORDER BY 
+            d.Fecha_Inicio ASC, -- Ordenar por fecha de inicio del descuento
+            p.Nombre_Producto ASC -- Orden secundario por nombre del producto
+        OFFSET @Offset ROWS
+        FETCH NEXT @PageSize ROWS ONLY;
+
+        -- Si la ejecución fue exitosa
+        SET @OutCode = 0; -- Código para operación exitosa
+
+    END TRY
+    BEGIN CATCH
+        -- Manejar errores
+        DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
+        THROW 50000, @ErrorMessage, 1;
+    END CATCH
+END;
+GO
+
+
+
+    ------------------------------------------------
+	-------- Productos ordenados por precio -------- 
+	------------------------------------------------
+
+CREATE PROCEDURE get_productos_precio
+AS
+BEGIN
+    BEGIN TRY
+        -- Seleccionar todos los detalles del producto con nombres de categoría y marca
+        SELECT 
+            p.ID_Producto,
+            p.Nombre_Producto,
+            p.Descripcion,
+            c.Nombre_Categoria,
+            m.Nombre_Marca,
+            p.Precio,
+            p.Existencias,
+            p.Fecha_Creacion,
+            p.Imagen
+        FROM 
+            Productos p
+        INNER JOIN 
+            Categorías c ON p.ID_Categoria = c.ID_Categoria
+        INNER JOIN 
+            Marcas m ON p.ID_Marca = m.ID_Marca
+        ORDER BY 
+            p.Precio ASC; -- Orden ascendente por precio
+
+    END TRY
+    BEGIN CATCH
+        -- Capturar y mostrar errores
+        DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
+        THROW 50000, @ErrorMessage, 1;
+    END CATCH
+END;
+GO
+
+
+
+    ---------------------------------------------------
+	-------- Productos ordenados por categoria --------
+	---------------------------------------------------
+CREATE PROCEDURE get_productos_categoria
+AS
+BEGIN
+    BEGIN TRY
+        -- Seleccionar todos los detalles del producto con nombres de categoría y marca, ordenados por categoría
+        SELECT 
+            c.Nombre_Categoria,
+            p.ID_Producto,
+            p.Nombre_Producto,
+            p.Descripcion,
+            m.Nombre_Marca,
+            p.Precio,
+            p.Existencias,
+            p.Fecha_Creacion,
+            p.Imagen
+        FROM 
+            Productos p
+        INNER JOIN 
+            Categorías c ON p.ID_Categoria = c.ID_Categoria
+        INNER JOIN 
+            Marcas m ON p.ID_Marca = m.ID_Marca
+        ORDER BY 
+            c.Nombre_Categoria ASC, -- Ordenar por categoría alfabéticamente
+            p.Nombre_Producto ASC; -- Ordenar por nombre del producto dentro de cada categoría
+
+    END TRY
+    BEGIN CATCH
+        -- Capturar y mostrar errores
+        DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
+        THROW 50000, @ErrorMessage, 1;
+    END CATCH
+END;
+GO
+
+
+
+    --------------------------------------------------
+	-------- Pro ordenados por marca 10 en 10 -------- 
+	--------------------------------------------------
+CREATE PROCEDURE get_productos_marca
+AS
+BEGIN
+    BEGIN TRY
+        -- Seleccionar todos los detalles del producto con nombres de categoría y marca, ordenados por marca
+        SELECT 
+            m.Nombre_Marca,
+            p.ID_Producto,
+            p.Nombre_Producto,
+            p.Descripcion,
+            c.Nombre_Categoria,
+            p.Precio,
+            p.Existencias,
+            p.Fecha_Creacion,
+            p.Imagen
+        FROM 
+            Productos p
+        INNER JOIN 
+            Categorías c ON p.ID_Categoria = c.ID_Categoria
+        INNER JOIN 
+            Marcas m ON p.ID_Marca = m.ID_Marca
+        ORDER BY 
+            m.Nombre_Marca ASC, -- Ordenar por marca alfabéticamente
+            p.Nombre_Producto ASC; -- Ordenar por nombre del producto dentro de cada marca
+
+    END TRY
+    BEGIN CATCH
+        -- Capturar y mostrar errores
+        DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
+        THROW 50000, @ErrorMessage, 1;
+    END CATCH
+END;
+GO
+
+
+
+
+    --------------------------
+	-------- Producto -------- 
+	--------------------------
+CREATE PROCEDURE get_producto
+    @id_producto INT -- ID del producto a buscar
+AS
+BEGIN
+    BEGIN TRY
+        -- Seleccionar los detalles de un producto con nombres de categoría y marca
+        SELECT 
+            p.ID_Producto,
+            p.Nombre_Producto,
+            p.Descripcion,
+            c.Nombre_Categoria,
+            m.Nombre_Marca,
+            p.Precio,
+            p.Existencias,
+            p.Fecha_Creacion,
+            p.Imagen
+        FROM 
+            Productos p
+        INNER JOIN 
+            Categorías c ON p.ID_Categoria = c.ID_Categoria
+        INNER JOIN 
+            Marcas m ON p.ID_Marca = m.ID_Marca
+        WHERE 
+            p.ID_Producto = @id_producto; -- Filtrar por el ID del producto
+
+    END TRY
+    BEGIN CATCH
+        -- Capturar y mostrar errores
+        DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
+        THROW 50000, @ErrorMessage, 1;
+    END CATCH
+END;
+GO
+
+
+
+	-------------------------------------------
+	-------- Productos Destacados Top5 --------
+	-------------------------------------------
+
+CREATE PROCEDURE get_Destacados
+AS
+BEGIN
+    BEGIN TRY
+        -- Seleccionar los productos más vendidos (Top 5 por cantidad total)
+        SELECT TOP 5
+            p.ID_Producto,
+            p.Nombre_Producto,
+            p.Descripcion,
+            c.Nombre_Categoria,
+            m.Nombre_Marca,
+            p.Precio,
+            SUM(pd.Cantidad) AS Total_Vendido,
+            COUNT(pd.ID_Pedido_Detalle) AS Total_Pedidos
+        FROM 
+            Pedido_Detalle pd
+        INNER JOIN 
+            Productos p ON pd.ID_Producto = p.ID_Producto
+        INNER JOIN 
+            Categorías c ON p.ID_Categoria = c.ID_Categoria
+        INNER JOIN 
+            Marcas m ON p.ID_Marca = m.ID_Marca
+        GROUP BY 
+            p.ID_Producto,
+            p.Nombre_Producto,
+            p.Descripcion,
+            c.Nombre_Categoria,
+            m.Nombre_Marca,
+            p.Precio
+        ORDER BY 
+            Total_Vendido DESC, -- Ordenar por cantidad total vendida en orden descendente
+            Total_Pedidos DESC; -- Si hay empate, ordenar por cantidad de pedidos
+
+    END TRY
+    BEGIN CATCH
+        -- Manejar errores
+        DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
+        THROW 50000, @ErrorMessage, 1;
+    END CATCH
+END;
+GO
+
+
+
+    -----------------------------------------------------------------------------
+	-------- Top 5 de clientes que más compran, suma monto de compras,   --------
+    -------- cantidad de pedidos, cantidad de articulos distintos.       -------- 
+	-----------------------------------------------------------------------------
+
+CREATE PROCEDURE get_TopClientes
+AS
+BEGIN
+    BEGIN TRY
+        -- Seleccionar los 5 clientes principales basados en sus compras
+        SELECT TOP 5
+            u.ID_Usuario,
+            CONCAT(u.Nombre, ' ', u.Apellido) AS NombreCompleto,
+            COUNT(DISTINCT p.ID_Pedido) AS Total_Pedidos,
+            SUM(pd.Precio_Unitario * pd.Cantidad) AS Monto_Total_Compras,
+            COUNT(DISTINCT pd.ID_Producto) AS Total_Articulos_Distintos
+        FROM 
+            Usuarios u
+        INNER JOIN 
+            Pedidos p ON u.ID_Usuario = p.ID_Usuario
+        INNER JOIN 
+            Pedido_Detalle pd ON p.ID_Pedido = pd.ID_Pedido
+        GROUP BY 
+            u.ID_Usuario, 
+            u.Nombre, 
+            u.Apellido
+        ORDER BY 
+            Monto_Total_Compras DESC, -- Ordenar por monto total comprado
+            Total_Pedidos DESC,       -- Ordenar secundario por número de pedidos
+            Total_Articulos_Distintos DESC; -- Ordenar terciario por artículos distintos
+
+    END TRY
+    BEGIN CATCH
+        -- Manejar errores
+        DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
+        THROW 50000, @ErrorMessage, 1;
+    END CATCH
+END;
+GO
+
+
+
+    ----------------------------------
+	-------- Top 3 categorias -------- 
+	----------------------------------
+
+CREATE PROCEDURE get_TopCategorias
+AS
+BEGIN
+    BEGIN TRY
+        -- Seleccionar las 3 categorías más compradas basándose en el número total de productos vendidos
+        SELECT TOP 3
+            c.ID_Categoria,
+            c.Nombre_Categoria,
+            COUNT(pd.ID_Producto) AS Total_Productos_Vendidos,
+            SUM(pd.Cantidad) AS Total_Unidades_Vendidas
+        FROM 
+            Pedido_Detalle pd
+        INNER JOIN 
+            Productos p ON pd.ID_Producto = p.ID_Producto
+        INNER JOIN 
+            Categorías c ON p.ID_Categoria = c.ID_Categoria
+        GROUP BY 
+            c.ID_Categoria, 
+            c.Nombre_Categoria
+        ORDER BY 
+            Total_Unidades_Vendidas DESC, -- Ordenar por total de unidades vendidas
+            Total_Productos_Vendidos DESC; -- Orden secundario por número de productos vendidos
+
+    END TRY
+    BEGIN CATCH
+        -- Manejar errores
+        DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
+        THROW 50000, @ErrorMessage, 1;
+    END CATCH
+END;
+GO
+
+
+    
+    ----------------------------------------------------
+	-------- Ventas por cliente en las lineas y --------
+    -------- por categoria en las col           --------
+	----------------------------------------------------
+
+CREATE PROCEDURE get_ventas_cc
+    @PageNumber INT,     -- Número de la página
+    @PageSize INT = 10,  -- Tamaño de página (10 registros por defecto)
+    @OutCode INT OUTPUT  -- Código de salida
+AS
+BEGIN
+    BEGIN TRY
+        -- Validar que los parámetros de paginación sean válidos
+        IF @PageNumber <= 0 OR @PageSize <= 0
+        BEGIN
+            SET @OutCode = 50017; -- Parámetros de paginación inválidos
+            RETURN;
+        END
+
+        -- Calcular el número de registros a omitir
+        DECLARE @Offset INT = (@PageNumber - 1) * @PageSize;
+
+        -- Seleccionar las ventas por cliente y categoría con paginación
+        SELECT 
+            CONCAT(u.Nombre, ' ', u.Apellido) AS NombreUsuario,
+            p.ID_Pedido AS IDPedido,
+            pr.Nombre_Producto AS NombreProducto,
+            c.Nombre_Categoria AS NombreCategoria,
+            pd.Cantidad AS Cantidad,
+            pd.Precio_Unitario AS PrecioUnitario,
+            CAST(pd.Cantidad * pd.Precio_Unitario AS DECIMAL(10, 2)) AS Total
+        FROM 
+            Pedido_Detalle pd
+        INNER JOIN 
+            Pedidos p ON pd.ID_Pedido = p.ID_Pedido
+        INNER JOIN 
+            Usuarios u ON p.ID_Usuario = u.ID_Usuario
+        INNER JOIN 
+            Productos pr ON pd.ID_Producto = pr.ID_Producto
+        INNER JOIN 
+            Categorías c ON pr.ID_Categoria = c.ID_Categoria
+        ORDER BY 
+            u.Nombre, -- Ordenar por nombre del usuario
+            c.Nombre_Categoria, -- Ordenar por categoría
+            p.ID_Pedido -- Ordenar por ID de pedido
+        OFFSET @Offset ROWS
+        FETCH NEXT @PageSize ROWS ONLY;
+
+        -- Si la ejecución fue exitosa
+        SET @OutCode = 0; -- Código para operación exitosa
+
+    END TRY
+    BEGIN CATCH
+        -- Manejar errores y establecer un código de error general
+        SET @OutCode = 50000; -- Error general
+
+        -- Capturar el mensaje del error
+        DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
+        THROW 50000, @ErrorMessage, 1;
+    END CATCH
+END;
+GO
+
+
+
+    -------------------------------------------------------
+	-------- Ventas para cada mes del año, mostrar --------
+    -------- las ventas por marca de productos     -------- 
+	-------------------------------------------------------
+
+CREATE PROCEDURE get_ventas_por_mes
+    @year INT,           -- Año para filtrar las ventas
+    @PageNumber INT,     -- Número de la página
+    @PageSize INT = 10,  -- Tamaño de página (10 registros por defecto)
+    @OutCode INT OUTPUT  -- Código de salida
+AS
+BEGIN
+    BEGIN TRY
+        -- Validar que los parámetros de paginación sean válidos
+        IF @PageNumber <= 0 OR @PageSize <= 0
+        BEGIN
+            SET @OutCode = 50017; -- Parámetros de paginación inválidos
+            RETURN;
+        END
+
+        -- Calcular el número de registros a omitir
+        DECLARE @Offset INT = (@PageNumber - 1) * @PageSize;
+
+        -- Seleccionar las ventas para cada mes del año especificado con paginación
+        SELECT 
+            DATENAME(MONTH, p.Fecha_Pedido) AS Mes,
+            CONCAT(u.Nombre, ' ', u.Apellido) AS NombreUsuario,
+            p.ID_Pedido AS IDPedido,
+            pr.Nombre_Producto AS NombreProducto,
+            c.Nombre_Categoria AS NombreCategoria,
+            m.Nombre_Marca AS NombreMarca,
+            pd.Cantidad AS Cantidad,
+            pd.Precio_Unitario AS PrecioUnitario,
+            CAST(pd.Cantidad * pd.Precio_Unitario AS DECIMAL(10, 2)) AS Total
+        FROM 
+            Pedido_Detalle pd
+        INNER JOIN 
+            Pedidos p ON pd.ID_Pedido = p.ID_Pedido
+        INNER JOIN 
+            Usuarios u ON p.ID_Usuario = u.ID_Usuario
+        INNER JOIN 
+            Productos pr ON pd.ID_Producto = pr.ID_Producto
+        INNER JOIN 
+            Categorías c ON pr.ID_Categoria = c.ID_Categoria
+        INNER JOIN 
+            Marcas m ON pr.ID_Marca = m.ID_Marca
+        WHERE 
+            YEAR(p.Fecha_Pedido) = @year -- Filtrar por el año especificado
+        ORDER BY 
+            DATENAME(MONTH, p.Fecha_Pedido), -- Ordenar por mes
+            m.Nombre_Marca, -- Ordenar por marca
+            p.ID_Pedido -- Ordenar adicionalmente por ID de pedido
+        OFFSET @Offset ROWS
+        FETCH NEXT @PageSize ROWS ONLY;
+
+        -- Si la ejecución fue exitosa
+        SET @OutCode = 0; -- Código para operación exitosa
+
+    END TRY
+    BEGIN CATCH
+        -- Manejar errores y establecer un código de error general
+        SET @OutCode = 50000; -- Error general
+
+        -- Capturar el mensaje del error
+        DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
+        THROW 50000, @ErrorMessage, 1;
+    END CATCH
+END;
+GO
+
+
+
+    --------------------------------------
+	-------- Historial de pedidos -------- 
+	--------------------------------------
+
+CREATE PROCEDURE get_historial_pedidos
+    @usuarioID INT,      -- ID del usuario
+    @PageNumber INT,      -- Número de la página
+    @PageSize INT = 10,   -- Tamaño de página (10 registros por defecto)
+    @OutCode INT OUTPUT  -- Código de salida
+AS
+BEGIN
+    BEGIN TRY
+        -- Validar que el usuario existe
+        IF NOT EXISTS (SELECT 1 FROM Usuarios WHERE ID_Usuario = @usuarioID)
+        BEGIN
+            SET @OutCode = 50004; -- Usuario no encontrado
+            RETURN;
+        END
+
+        -- Validar que los parámetros de paginación sean válidos
+        IF @PageNumber <= 0 OR @PageSize <= 0
+        BEGIN
+            SET @OutCode = 50017; -- Parámetros de paginación inválidos
+            RETURN;
+        END
+
+        -- Calcular el número de registros a omitir
+        DECLARE @Offset INT = (@PageNumber - 1) * @PageSize;
+
+        -- Obtener el historial de pedidos del usuario con paginación
+        SELECT 
+            CONCAT(u.Nombre, ' ', u.Apellido) AS NombreUsuario,
+            p.ID_Pedido AS PedidoID,
+            p.Fecha_Pedido,
+            p.Estado,
+            p.Precio_Total AS PrecioTotal,
+            CONCAT(d.Direccion, ', ', d.Ciudad, ', ', ISNULL(d.Provincia, ''), ', ', d.Pais) AS Direccion,
+            CONCAT(mp.Tipo, ': ', mp.Detalles) AS DetallesMetodo
+        FROM 
+            Pedidos p
+        INNER JOIN 
+            Usuarios u ON p.ID_Usuario = u.ID_Usuario
+        INNER JOIN 
+            Direcciones d ON p.ID_Direccion = d.ID_Direccion
+        INNER JOIN 
+            Métodos_Pago mp ON p.ID_Metodo_Pago = mp.ID_Metodo_Pago
+        WHERE 
+            p.ID_Usuario = @usuarioID
+        ORDER BY 
+            p.Fecha_Pedido DESC -- Ordenar por fecha de pedido, de más reciente a más antiguo
+        OFFSET @Offset ROWS
+        FETCH NEXT @PageSize ROWS ONLY;
+
+        -- Si la ejecución fue exitosa
+        SET @OutCode = 0; -- Código para operación exitosa
+
+    END TRY
+    BEGIN CATCH
+        -- Manejar errores y establecer un código de error general
+        SET @OutCode = 50000; -- Error general
+
+        -- Capturar el mensaje del error
+        DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
+        THROW 50000, @ErrorMessage, 1;
+    END CATCH
+END;
+GO
+
+
+
+    --------------------------------------------------
+	-------- Productos filtrado por categoria -------- 
+	--------------------------------------------------
+
+CREATE PROCEDURE get_productosByCat
+    @categoria NVARCHAR(100), -- Nombre de la categoría a filtrar
+    @OutCode INT OUTPUT       -- Código de salida
+AS
+BEGIN
+    BEGIN TRY
+        -- Validar que la categoría existe
+        IF NOT EXISTS (SELECT 1 FROM Categorías WHERE Nombre_Categoria = @categoria)
+        BEGIN
+            SET @OutCode = 50014; -- Nombre de categoría no existe
+            RETURN;
+        END
+
+        -- Seleccionar productos filtrados por la categoría
+        SELECT 
+            p.ID_Producto,
+            p.Nombre_Producto,
+            p.Descripcion,
+            c.Nombre_Categoria,
+            m.Nombre_Marca,
+            p.Precio,
+            p.Existencias,
+            p.Fecha_Creacion,
+            p.URL_Imagen
+        FROM 
+            Productos p
+        INNER JOIN 
+            Categorías c ON p.ID_Categoria = c.ID_Categoria
+        INNER JOIN 
+            Marcas m ON p.ID_Marca = m.ID_Marca
+        WHERE 
+            c.Nombre_Categoria = @categoria
+        ORDER BY 
+            p.Nombre_Producto; -- Ordenar por nombre de producto
+
+        -- Si la ejecución fue exitosa
+        SET @OutCode = 0; -- Operación exitosa
+
+    END TRY
+    BEGIN CATCH
+        -- Manejar errores y establecer un código de error general
+        SET @OutCode = 50000; -- Error general
+
+        -- Capturar el mensaje del error
+        DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
+        THROW 50000, @ErrorMessage, 1;
+    END CATCH
+END;
+GO
+
+
+
+    -------------------------------------------------
+	-------- Resenas de un producto 10 en 10 -------- 
+	-------------------------------------------------
+
+CREATE PROCEDURE get_Resenas
+    @id_producto INT,     -- ID del producto
+    @PageNumber INT,      -- Número de página
+    @PageSize INT = 10,   -- Tamaño de página (por defecto 10)
+    @OutCode INT OUTPUT   -- Código de salida
+AS
+BEGIN
+    BEGIN TRY
+        -- Validar que el producto existe
+        IF NOT EXISTS (SELECT 1 FROM Productos WHERE ID_Producto = @id_producto)
+        BEGIN
+            SET @OutCode = 50016; -- Producto no encontrado
+            RETURN;
+        END
+
+        -- Validar parámetros de paginación
+        IF @PageNumber <= 0 OR @PageSize <= 0
+        BEGIN
+            SET @OutCode = 50017; -- Parámetros de paginación inválidos
+            RETURN;
+        END
+
+        -- Calcular el número de registros a omitir
+        DECLARE @Offset INT = (@PageNumber - 1) * @PageSize;
+
+        -- Obtener las reseñas del producto con paginación
+        SELECT 
+            CONCAT(u.Nombre, ' ', u.Apellido) AS NombreUsuario,
+            p.Nombre_Producto AS NombreProducto,
+            r.Calificacion,
+            r.Comentario,
+            r.Fecha
+        FROM 
+            Reseñas r
+        INNER JOIN 
+            Usuarios u ON r.ID_Usuario = u.ID_Usuario
+        INNER JOIN 
+            Productos p ON r.ID_Producto = p.ID_Producto
+        WHERE 
+            r.ID_Producto = @id_producto
+        ORDER BY 
+            r.Fecha DESC -- Ordenar por fecha de reseña, más recientes primero
+        OFFSET @Offset ROWS
+        FETCH NEXT @PageSize ROWS ONLY;
+
+        -- Si la ejecución fue exitosa
+        SET @OutCode = 0; -- Operación exitosa
+
+    END TRY
+    BEGIN CATCH
+        -- Manejar errores y establecer un código de error general
+        SET @OutCode = 50000; -- Error general
+
+        -- Capturar el mensaje del error
+        DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
+        THROW 50000, @ErrorMessage, 1;
+    END CATCH
+END;
+GO
+
+    -------------------------------------------------
+	-------- Get de Todas las marcas -------- 
+	-------------------------------------------------
+
+CREATE PROCEDURE get_marcas
+
+AS
+BEGIN
+
+	SELECT M.ID_Marca,
+		M.Nombre_Marca,
+		M.Descripcion
+
+	FROM Marcas M
+
+END;
+GO
+
+    -------------------------------------------------
+	-------- Get de Todas las categorias -------- 
+	-------------------------------------------------
+
+CREATE PROCEDURE [dbo].[get_categorias]
+
+AS
+BEGIN
+
+
+	SELECT C.ID_Categoria,
+		C.Nombre_Categoria,
+		C.Descripcion
+
+	FROM Categorías C
+
+END;
+GO
+
+    -- NUEVO TAMARA
+
+    -------------------------------------------------
+	-------- Get de usuarios menos admin -------- 
+	-------------------------------------------------
+
+CREATE PROCEDURE get_usuarios
+
+AS
+BEGIN
+	SELECT U.ID_Usuario,
+	U.Nombre,
+	U.Apellido,
+	U.Contraseña,
+	U.Correo_Electronico,
+	U.Fecha_Registro,
+	U.Teléfono as Telefono,
+	U.Tipo_Usuario
+	
+	FROM Usuarios U
+	WHERE U.Tipo_Usuario <> 'Administrador'
+
+END;
+GO
+
+    -------------------------------------------------
+	-------- Get de descuentos para Tamara -------- 
+	-------------------------------------------------
+
+CREATE PROCEDURE get_descuentos_admin
+AS
+BEGIN
+	SELECT D.ID_Descuento,
+		D.ID_Producto,
+		D.Descuento_Porcentaje,
+		D.Fecha_Inicio,
+		D.Fecha_Fin,
+		P.Nombre_Producto
+
+	FROM Descuentos D
+	INNER JOIN Productos P ON P.ID_Producto = D.ID_Producto
+END;
+GO
+
+    --------------------------------------
+	-------- Historial de pedidos ADMIN Tamara -------- 
+	--------------------------------------
+
+CREATE PROCEDURE get_historial_pedidos_admin
+    @PageNumber INT,      -- Número de la página
+    @PageSize INT = 10,   -- Tamaño de página (10 registros por defecto)
+    @OutCode INT OUTPUT  -- Código de salida
+AS
+BEGIN
+    BEGIN TRY
+
+        -- Validar que los parámetros de paginación sean válidos
+        IF @PageNumber <= 0 OR @PageSize <= 0
+        BEGIN
+            SET @OutCode = 50017; -- Parámetros de paginación inválidos
+            RETURN;
+        END
+
+        -- Calcular el número de registros a omitir
+        DECLARE @Offset INT = (@PageNumber - 1) * @PageSize;
+
+        -- Obtener el historial de pedidos del usuario con paginación
+        SELECT 
+            CONCAT(u.Nombre, ' ', u.Apellido) AS NombreUsuario,
+            p.ID_Pedido AS PedidoID,
+            p.Fecha_Pedido,
+            p.Estado,
+            p.Precio_Total AS PrecioTotal,
+            CONCAT(d.Direccion, ', ', d.Ciudad, ', ', ISNULL(d.Provincia, ''), ', ', d.Pais) AS Direccion,
+            CONCAT(mp.Tipo, ': ', mp.Detalles) AS DetallesMetodo
+        FROM 
+            Pedidos p
+        INNER JOIN 
+            Usuarios u ON p.ID_Usuario = u.ID_Usuario
+        INNER JOIN 
+            Direcciones d ON p.ID_Direccion = d.ID_Direccion
+        INNER JOIN 
+            Métodos_Pago mp ON p.ID_Metodo_Pago = mp.ID_Metodo_Pago
+
+        ORDER BY 
+            p.Fecha_Pedido DESC -- Ordenar por fecha de pedido, de más reciente a más antiguo
+        OFFSET @Offset ROWS
+        FETCH NEXT @PageSize ROWS ONLY;
+
+        -- Si la ejecución fue exitosa
+        SET @OutCode = 0; -- Código para operación exitosa
+
+    END TRY
+    BEGIN CATCH
+        -- Manejar errores y establecer un código de error general
+        SET @OutCode = 50000; -- Error general
+
+        -- Capturar el mensaje del error
+        DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
+        THROW 50000, @ErrorMessage, 1;
+    END CATCH
+END;
+GO

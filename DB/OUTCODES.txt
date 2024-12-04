@@ -1,0 +1,36 @@
+
+
+Codigos:
+
+0: Exito
+50000: Valor estándar para errores personalizados.
+50001: Correo electrónico ya existe
+50002: Tipo de usuario no existe
+50003: formato de correo no valido
+50004: Usuario no existe
+50005: ID de Direccion no existe o no pertenece al usuario
+50006: Dirección principal ya existe en este usuario
+50007: Metodo de pago principal ya existe para este usuario
+50008: ID de Metodo de pago no existe o no pertenece al usuario
+50009: Nombre de categoria ya existente
+50010: ID de Categoria no existe o no pertenece al usuario
+50011: Nombre de marca ya existente
+50012: Marca no encontrada
+50013: Nombre de producto ya existente
+50014: Nombre de categoria no existe 
+50015: Nombre de marca no existe 
+50016: Producto no encontrado
+50017: Error de parametros generico
+50018: Pedido no no existe o no pertenece al usuario
+50019: Pedido detalle no encontrado o no pertenece al pedido
+50020: Carrito ya existe para este usuario
+50021: Carrito no encontrado para este usuario
+50022: Usuario ya tiene tres métodos de pago
+50023: Descuento fuera de rango
+50024: Fecha de inicio inválida
+50025: Fecha fin antes de inicio
+50026: Ya existe un descuento vigente
+50027: Fondos insuficientes
+50028: No hay suficientes existencias de producto
+50029: Carrito vacio
+50030: No hay existencias suficientes  

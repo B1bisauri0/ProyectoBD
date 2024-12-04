@@ -1,0 +1,409 @@
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:jaimex_front/Pages/Admin/VIEWS/lista_categorias%20.dart';
+import 'package:jaimex_front/data/categoria.dart';
+import 'package:http/http.dart' as http;
+
+// ignore: must_be_immutable
+class EditarCategoria extends StatefulWidget {
+  Categoria categoria;
+  int IDUsuario;
+
+  EditarCategoria(this.IDUsuario, this.categoria, {super.key});
+
+  @override
+  // ignore: library_private_types_in_public_api
+  _EditarCategoriaState createState() => _EditarCategoriaState();
+}
+
+class _EditarCategoriaState extends State<EditarCategoria> {
+  // TEXTFIELDS
+  int _charCount = 0;
+  bool mostrarTextField = false;
+  final _formKey = GlobalKey<FormState>();
+  final TextEditingController _nombreController = TextEditingController();
+  final TextEditingController _descripcionController = TextEditingController();
+
+  void EditarCategoria() {
+    // DATOS
+    widget.categoria.nombre = _nombreController.text;
+    widget.categoria.descripcion = _descripcionController.text;
+
+    upsertCategoria(widget.categoria, context);
+  }
+
+  Future<String> upsertCategoria(
+      Categoria categoria, BuildContext context) async {
+    final url = Uri.parse('http://127.0.0.1:8000/upsert_categoria');
+    final headers = {'Content-Type': 'application/json'};
+    final body = jsonEncode(categoria.toJson());
+
+    try {
+      final response = await http.post(url, headers: headers, body: body);
+
+      if (response.statusCode == 200) {
+        // Navegar a la nueva pantalla
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ListaCategorias(widget.IDUsuario),
+          ),
+        );
+        final data = jsonDecode(response.body);
+        return data['message'];
+      } else {
+        final errorData = jsonDecode(response.body);
+        throw Exception(errorData['detail']); // Detalle del error
+      }
+    } catch (e) {
+      _showMessageDialog(context, e.toString());
+      throw Exception('Error al procesar la categoría: $e');
+    }
+  }
+
+  void _showMessageDialog(BuildContext context, String message) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(message.contains("Error") ? "Error" : "Éxito"),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: Text("OK"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _countCharacters(String text) {
+    setState(() {
+      _charCount = text.length; // Simplemente contamos la longitud del texto
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _nombreController.text = widget.categoria.nombre;
+    _descripcionController.text = widget.categoria.descripcion;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(),
+      backgroundColor: Color.fromRGBO(32, 40, 51, 1),
+      body: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.vertical,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                height: MediaQuery.of(context).size.height - 55,
+                width: 710,
+                decoration: const BoxDecoration(
+                  color: Color.fromRGBO(102, 252, 241, 0.8), // Color de fondo
+                  border: Border(
+                    right: BorderSide(
+                      color: Colors.white,
+                      width: 2.0, // Grosor del borde
+                    ),
+                  ),
+                ),
+                child: const Padding(
+                  padding: EdgeInsets.only(left: 60, right: 60, top: 200),
+                  child: Column(
+                    children: [
+                      Text(
+                        "¡Empecemos con la edición de la categoría que necesitas!",
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 58,
+                          color: Color.fromRGBO(32, 40, 51, 1),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      SizedBox(height: 50),
+                      Text(
+                        "Digita la información esencial para iniciar la edición de la categoría.",
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 30,
+                          color: Color.fromRGBO(11, 12, 16, 1),
+                          fontWeight: FontWeight.normal,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Form(
+                key: _formKey,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 100, top: 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "Editar Categoría",
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 58,
+                          color: Color.fromRGBO(102, 252, 241, 1),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(
+                            left: 20, top: 30, right: 280),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // NOMBRE DEL PROYECTO
+                            const Text(
+                              "Nombre de Categoría",
+                              style: TextStyle(
+                                fontFamily: 'Inter',
+                                fontSize: 20,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            SizedBox(
+                              width: 800,
+                              child: TextFormField(
+                                controller: _nombreController,
+                                validator: (value) {
+                                  if (value == null || value.isEmpty) {
+                                    return 'El nombre de la categoría es obligatoria';
+                                  }
+                                  return null;
+                                },
+                                style: const TextStyle(
+                                  fontFamily: 'Inter',
+                                  fontSize: 16,
+                                  color: Colors.white,
+                                ),
+                                decoration: InputDecoration(
+                                  filled: false,
+                                  fillColor: Colors.white,
+                                  labelText: 'Nombre de Categoría',
+                                  labelStyle: const TextStyle(
+                                    fontFamily: 'Inter',
+                                    fontSize: 16,
+                                    color: Colors.white,
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(15.0),
+                                    borderSide: const BorderSide(
+                                      color: Color.fromRGBO(70, 162, 159, 1),
+                                      width: 2.0,
+                                    ),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(15.0),
+                                    borderSide: const BorderSide(
+                                      color: Color.fromRGBO(70, 162, 159, 1),
+                                      width: 2.0,
+                                    ),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(15.0),
+                                    borderSide: const BorderSide(
+                                      color: Color.fromRGBO(70, 162, 159, 1),
+                                      width: 2.0,
+                                    ),
+                                  ),
+                                  errorBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(15.0),
+                                    borderSide: const BorderSide(
+                                      color: Colors.red,
+                                      width: 2.0,
+                                    ),
+                                  ),
+                                  focusedErrorBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(15.0),
+                                    borderSide: const BorderSide(
+                                      color: Colors.red,
+                                      width: 2.0,
+                                    ),
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 10.0, vertical: 10.0),
+                                ),
+                              ),
+                            ),
+                            // Descripcion
+                            const SizedBox(height: 30),
+                            const Text(
+                              "Descripción",
+                              style: TextStyle(
+                                fontFamily: 'Inter',
+                                fontSize: 20,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            SizedBox(
+                              width: 800,
+                              child: TextFormField(
+                                controller: _descripcionController,
+                                onChanged: _countCharacters,
+                                maxLines: 5,
+                                minLines: 5,
+                                validator: (value) {
+                                  if (value == null || value.isEmpty) {
+                                    return 'La descripcion de la categoría es obligatoria';
+                                  }
+                                  return null;
+                                },
+                                style: const TextStyle(
+                                  fontFamily: 'Inter',
+                                  fontSize: 16,
+                                  color: Colors.white,
+                                ),
+                                decoration: InputDecoration(
+                                  labelText: 'Descripción',
+                                  labelStyle: const TextStyle(
+                                    fontFamily: 'Inter',
+                                    fontSize: 16,
+                                    color: Colors.white,
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(15.0),
+                                    borderSide: const BorderSide(
+                                      color: Color.fromRGBO(70, 162, 159, 1),
+                                      width: 2.0,
+                                    ),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(15.0),
+                                    borderSide: const BorderSide(
+                                      color: Color.fromRGBO(70, 162, 159, 1),
+                                      width: 2.0,
+                                    ),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(15.0),
+                                    borderSide: const BorderSide(
+                                      color: Color.fromRGBO(70, 162, 159, 1),
+                                      width: 2.0,
+                                    ),
+                                  ),
+                                  errorBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(15.0),
+                                    borderSide: const BorderSide(
+                                      color: Colors.red,
+                                      width: 2.0,
+                                    ),
+                                  ),
+                                  focusedErrorBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(15.0),
+                                    borderSide: const BorderSide(
+                                      color: Colors.red,
+                                      width: 2.0,
+                                    ),
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 10.0, vertical: 10.0),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 5),
+                            Text(
+                              'Caracteres: $_charCount',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[300],
+                                fontFamily: 'Inter',
+                              ),
+                            ),
+
+                            // BOTON CREAR
+                            SizedBox(height: 40),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 50, vertical: 25),
+                                    backgroundColor:
+                                        Color.fromRGBO(102, 252, 241, 1),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    elevation: 4,
+                                  ),
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) =>
+                                            ListaCategorias(widget.IDUsuario),
+                                      ),
+                                    );
+                                  },
+                                  child: const Text(
+                                    "Cancelar",
+                                    style: TextStyle(
+                                      color: Color.fromRGBO(32, 40, 51, 1),
+                                      fontFamily: 'Inter',
+                                      fontSize: 30,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 250),
+                                ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 50, vertical: 25),
+                                    backgroundColor:
+                                        Color.fromRGBO(102, 252, 241, 1),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    elevation: 4,
+                                  ),
+                                  onPressed: () {
+                                    if (_formKey.currentState!.validate()) {
+                                      EditarCategoria();
+                                    }
+                                  },
+                                  child: const Text(
+                                    "Editar Categoria",
+                                    style: TextStyle(
+                                      color: Color.fromRGBO(32, 40, 51, 1),
+                                      fontFamily: 'Inter',
+                                      fontSize: 30,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

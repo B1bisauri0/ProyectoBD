@@ -1,0 +1,65 @@
+name: jaimex_front
+description: A new Flutter project.
+
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+
+version: 0.0.1+1
+
+environment:
+  sdk: '>=2.19.4 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+    
+  intl: ^0.17.0
+  english_words: ^4.0.0
+  provider: ^6.0.0
+  http: ^1.2.2
+  fl_chart: ^0.69.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^2.0.0
+
+flutter:
+
+  uses-material-design: true
+  assets:
+    - assets/images/login/
+    - assets/images/Header/
+    - assets/images/Base/
+  
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/Fonts/Inter/Inter-Regular.ttf
+        - asset: assets/Fonts/Inter/Inter-SemiBold.ttf
+        - asset: assets/Fonts/Inter/Inter-SemiBoldItalic.ttf
+        - asset: assets/Fonts/Inter/Inter-Black.ttf
+        - asset: assets/Fonts/Inter/Inter-BlackItalic.ttf
+        - asset: assets/Fonts/Inter/Inter-Bold.ttf
+        - asset: assets/Fonts/Inter/Inter-BoldItalic.ttf
+        - asset: assets/Fonts/Inter/Inter-ExtraBold.ttf
+
+    - family: Roboto Condensed
+      fonts:
+        - asset: assets/Fonts/RobotoCondensed/RobotoCondensed-Bold.ttf
+        - asset: assets/Fonts/RobotoCondensed/RobotoCondensed-BoldItalic.ttf
+        - asset: assets/Fonts/RobotoCondensed/RobotoCondensed-Italic.ttf
+        - asset: assets/Fonts/RobotoCondensed/RobotoCondensed-Light.ttf
+        - asset: assets/Fonts/RobotoCondensed/RobotoCondensed-LightItalic.ttf
+        - asset: assets/Fonts/RobotoCondensed/RobotoCondensed-Regular.ttf
+
+    - family: Dubai
+      fonts:
+        - asset: assets/Fonts/Dubai/Dubai-Bold.ttf
+        - asset: assets/Fonts/Dubai/Dubai-Light.ttf
+        - asset: assets/Fonts/Dubai/Dubai-Medium.ttf
+        - asset: assets/Fonts/Dubai/Dubai-Regular.ttf
+
+    - family: Shrikhand
+      fonts:
+        - asset: assets/Fonts/Shrikhand-Regular.otf
