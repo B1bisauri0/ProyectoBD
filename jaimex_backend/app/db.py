@@ -3,14 +3,14 @@ import pyodbc
 def get_db_conn():
     connection_string = (
         "DRIVER={ODBC Driver 17 for SQL Server};"
-        "SERVER=proyecto-bd.database.windows.net,1433;"
+        "SERVER=secret-bd.database.windows.net,1433;"
         "DATABASE=DB_STORE;"
-        "UID=BDProyectoII;"
-        "PWD=JaimeGod1234;"
+        "UID=secret;"
+        "PWD=secret;"
     )
     try:
         connection = pyodbc.connect(connection_string)
-        connection.autocommit = True  # Habilitar autocommit
+        connection.autocommit = True
         print("Se conecto con exito")
         return connection
     except Exception as e:
